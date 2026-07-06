@@ -41,6 +41,12 @@ surface.CreateFont("DraftTimer", {
     weight = 1000
 })
 
+surface.CreateFont("DraftSmall", {
+    font = "Tahoma",
+    size = 38,
+    weight = 1000
+})
+
 surface.CreateFont("DraftRegular", {
     font = "Tahoma",
     size = 48,
@@ -530,7 +536,7 @@ hook.Add("HUDDrawScoreBoard", "TTTDraft_HUDDrawScoreBoard", function()
             progress = time / draft_turn_time:GetInt()
         end
         draw.SimpleText(string.format("%05.2f", time), "DraftTimer", ScrW() / 2, y, COLOR_WHITE, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
-        surface.DrawRect((ScrW() - (timerWidth * progress)) / 2, y + smallIconSize + smallIconMargin, (timerWidth * progress), groupDividerWidth)
+        surface.DrawRect((ScrW() - (timerWidth * progress)) / 2, y + smallIconSize + (0.5 * smallIconMargin), (timerWidth * progress), groupDividerWidth)
 
         local x = bottomPositions.x
         y = ScrH() - smallIconSize - smallIconMargin
@@ -720,6 +726,7 @@ hook.Add("HUDDrawScoreBoard", "TTTDraft_HUDDrawScoreBoard", function()
             end
 
             local message = {}
+            table.insert(message, {["text"] = "UP FIRST: ", ["color"] = COLOR_WHITE})
             if nextPly == LocalPlayer() then
                 table.insert(message, {["text"] = "YOU ARE ", ["color"] = COLOR_WHITE})
             elseif nextTurn.player == nil then
@@ -730,9 +737,8 @@ hook.Add("HUDDrawScoreBoard", "TTTDraft_HUDDrawScoreBoard", function()
             table.insert(message, action)
             table.insert(message, {["text"] = " " .. teamArticle[nextTurn.team], ["color"] = COLOR_WHITE})
             table.insert(message, {["text"] = " " .. teamNames[nextTurn.team], ["color"] = GetRoleTeamColor(nextTurn.team, "highlight")})
-            table.insert(message, {["text"] = " FIRST", ["color"] = COLOR_WHITE})
             for _, text in ipairs(message) do
-                text.color = ColorAlpha(text.color, 191)
+                text.color = ColorAlpha(text.color, 220)
             end
             DrawColoredText(message, "DraftRegular", x, (ScrH() / 2) + largeIconSize, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
         elseif draftPhase > #bottomPositions.order then
@@ -775,7 +781,12 @@ hook.Add("HUDDrawScoreBoard", "TTTDraft_HUDDrawScoreBoard", function()
             table.insert(message, {["text"] = " " .. teamNames[turn.team], ["color"] = GetRoleTeamColor(turn.team, "highlight")})
             DrawColoredText(message, "DraftLarge", x, (ScrH() - largeIconSize) / 2 - (0.5 * largeIconMargin), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
 
-            y = (ScrH() + largeIconSize) / 2 + largeIconMargin
+            y = (ScrH() + largeIconSize) / 2 + largeIconMargin + smallIconMargin
+            draw.NoTexture()
+            surface.SetDrawColor(COLOR_WHITE)
+            surface.DrawRect(centrePositions[turn.team].x - smallIconSize, y, ScrW() + (2 * smallIconSize) - (2 * centrePositions[turn.team].x), groupDividerWidth / 2)
+            y = y + (2 * smallIconMargin)
+
             if draftPhase > 1 then
                 local lastTurn = bottomPositions.order[draftPhase - 1]
                 local lastPly = player.GetBySteamID64(lastTurn.player)
@@ -807,11 +818,11 @@ hook.Add("HUDDrawScoreBoard", "TTTDraft_HUDDrawScoreBoard", function()
                 table.insert(message, action)
                 table.insert(message, {["text"] = " " .. string.upper(ROLE_STRINGS[previousSelection]), ["color"] = GetRoleTeamColor(lastTurn.team, "highlight")})
                 for _, text in ipairs(message) do
-                    text.color = ColorAlpha(text.color, 191)
+                    text.color = ColorAlpha(text.color, 220)
                 end
-                DrawColoredText(message, "DraftRegular", x, y, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
+                DrawColoredText(message, "DraftSmall", x, y, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
 
-                y = y + (0.75 * largeIconSize)
+                y = y + (0.65 * largeIconSize)
             end
 
             if draftPhase < #bottomPositions.order then
@@ -828,6 +839,7 @@ hook.Add("HUDDrawScoreBoard", "TTTDraft_HUDDrawScoreBoard", function()
                 end
 
                 message = {}
+                table.insert(message, {["text"] = "UP NEXT: ", ["color"] = COLOR_WHITE})
                 if nextPly == LocalPlayer() then
                     table.insert(message, {["text"] = "YOU ARE ", ["color"] = COLOR_WHITE})
                 elseif nextTurn.player == nil then
@@ -838,11 +850,10 @@ hook.Add("HUDDrawScoreBoard", "TTTDraft_HUDDrawScoreBoard", function()
                 table.insert(message, action)
                 table.insert(message, {["text"] = " " .. teamArticle[nextTurn.team], ["color"] = COLOR_WHITE})
                 table.insert(message, {["text"] = " " .. teamNames[nextTurn.team], ["color"] = GetRoleTeamColor(nextTurn.team, "highlight")})
-                table.insert(message, {["text"] = " NEXT", ["color"] = COLOR_WHITE})
                 for _, text in ipairs(message) do
-                    text.color = ColorAlpha(text.color, 191)
+                    text.color = ColorAlpha(text.color, 220)
                 end
-                DrawColoredText(message, "DraftRegular", x, y, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
+                DrawColoredText(message, "DraftSmall", x, y, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
             end
         end
 
@@ -851,8 +862,8 @@ hook.Add("HUDDrawScoreBoard", "TTTDraft_HUDDrawScoreBoard", function()
             local nextPly = player.GetBySteamID64(nextTurn.player)
             if nextPly == LocalPlayer() then
                 x = ScrW() / 2
-                y = (3 * smallIconSize) + (5 * smallIconMargin)
-                draw.SimpleText("YOU ARE UP NEXT", "DraftRegular", x, y, COLOR_WHITE, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
+                y = (3 * smallIconSize) + (4 * smallIconMargin)
+                draw.SimpleText("YOU ARE UP NEXT", "DraftSmall", x, y, COLOR_WHITE, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
             end
         end
     end
