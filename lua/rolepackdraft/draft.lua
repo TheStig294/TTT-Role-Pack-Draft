@@ -211,6 +211,128 @@ local function RandomisePickBanOrder(iteration)
         end
     end
 
+    local passes = 0
+    while passes < 50 do
+        ordered = true
+        for i = 1, #order - 1 do
+            if order[i].player == order[i+1].player then
+                -- If two turns in a row belong to the same player
+                if i < #order - 1 then
+                    -- If we are not at the end of the table, use the next element as a potential swap
+                    if order[i].player ~= order[i+2].player then
+                        -- Don't swap if the potential swap belongs to the same player
+                        if order[i+1].action == "pick" then
+                            -- One of four scenarios:
+                            -- PPP (We can safely swap consecutive picks)
+                            -- PPB (We can safely swap bans before picks)
+                            -- BPP (We can safely swap consecutive picks)
+                            -- BPB (We can safely swap bans before picks)
+                            -- In any case, we can swap i+1 and i+2
+                            ordered = false
+                            order[i+1], order[i+2] = order[i+2], order[i+1]
+                        else
+                            if order[i+2].action == "ban" then
+                                -- One of two scenarios:
+                                -- PBB (We can safely swap consecutive bans)
+                                -- BBB (We can safely swap consecutive bans)
+                                -- In either case, we can swap i+1 and i+2
+                                ordered = false
+                                order[i+1], order[i+2] = order[i+2], order[i+1]
+                            else
+                                -- One of two scenarios:
+                                -- PBP (We can't safely swap picks before bans)
+                                -- BBP (We can't safely swap picks before bans)
+                                -- In either case, we need to check that i+1 and i+2 aren't the same team
+                                if order[i+1].team ~= order[i+2].team then
+                                    -- If they aren't the same team, we can safely swap i+1 and i+2
+                                    ordered = false
+                                    order[i+1], order[i+2] = order[i+2], order[i+1]
+                                end
+                                -- Otherwise we can't safely swap and are stuck for now
+                            end
+                        end
+                    end
+                else
+                    -- If we are at the end of the table we have no next element we can swap with. Instead find one earlier in the table
+                    if order[i].action == "pick" and order[i+1].action == "pick" then
+                        -- If our two turns are both picks, we cannot safely swap a pick before a ban so we need to look at more information
+                        -- We do not want to swap the with turn immediately beforehand as this could undo a swap from the previous iteration
+                        -- Instead we look at the past two turns
+                        if order[i-1].action == "pick" then
+                            if order[i-2].action == "pick" then
+                                -- One possible scenario
+                                -- PPPP (We can safely swap among consecutive picks)
+                                -- In this case, we can swap i and i-2
+                                ordered = false
+                                order[i], order[i-2] = order[i-2], order[i]
+                            else
+                                -- One possible scenario
+                                -- BPPP (We can't safely swap picks before bans)
+                                -- In this case, we need to check that i and i-2 as well as i-1 and i-2 aren't the same team
+                                if order[i].team ~= order[i-2].team and order[i-1].team ~= order[i-2].team then
+                                    -- If they aren't the same team, we can safely swap i and i-2
+                                    ordered = false
+                                    order[i], order[i-2] = order[i-2], order[i]
+                                end
+                                -- Otherwise we can't safely swap and are stuck for now
+                            end
+                        else
+                            if order[i-2].action == "pick" then
+                                -- One possible scenario
+                                -- PBPP (We can't safely swap picks before bans)
+                                -- In this case, we need to check that i and i-1 aren't the same team
+                                if order[i].team ~= order[i-1].team then
+                                    -- If they aren't the same team, we can safely swap i and i-2
+                                    ordered = false
+                                    order[i], order[i-2] = order[i-2], order[i]
+                                end
+                                -- Otherwise we can't safely swap and are stuck for now
+                            else
+                                -- One possible scenario
+                                -- BBPP (We can't safely swap picks before bans)
+                                -- In this case, we need to check that i and i-2 as well as i and i-1 aren't the same team
+                                if order[i].team ~= order[i-2].team and order[i].team ~= order[i-1].team then
+                                    -- If they aren't the same team, we can safely swap i and i-2
+                                    ordered = false
+                                    order[i], order[i-2] = order[i-2], order[i]
+                                end
+                                -- Otherwise we can't safely swap and are stuck for now
+                            end
+                        end
+                    else
+                        -- We know we have at least one ban we can swap earlier and that we can always swap a bans before picks, so find the earliest pick that belongs to a different player
+                        for j = 1, #order - 2 do
+                            if order[i].player ~= order[j].player and order[j].action == "pick" then
+                                -- Don't swap if the potential swap belongs to the same player or if the potential swap is a ban
+                                if order[i].action == "ban" then
+                                    -- One of two scenarios
+                                    -- P...BP (We can safely swap bans before picks)
+                                    -- P...BB (We can safely swap bans before picks)
+                                    -- In either case, we can swap i and j
+                                    ordered = false
+                                    order[i], order[j] = order[j], order[i]
+                                    break
+                                else
+                                    if order[i+1].action == "ban" then
+                                        -- One possible scenario
+                                        -- P...PB (We can safely swap bans before picks)
+                                        -- In this case, we can swap i+1 and j
+                                        ordered = false
+                                        order[i+1], order[j] = order[j], order[i+1]
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                        -- If there are somehow no earlier picks that belong to a different player, we can't safely swap and are stuck for now
+                    end
+                end
+            end
+        end
+        if ordered then break end
+        passes = passes + 1
+    end
+
     return order
 end
 
