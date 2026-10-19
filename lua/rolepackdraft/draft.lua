@@ -18,12 +18,72 @@ local draft_prep_time = GetConVar("ttt_draft_prep_time")
 local draft_turn_time = GetConVar("ttt_draft_turn_time")
 local draft_end_time = GetConVar("ttt_draft_end_time")
 
+local draft_auto = CreateConVar("ttt_draft_auto", "0", FCVAR_NONE, "Whether the role draft should trigger automatically at the start of the first round of each map", 0, 1)
+local draft_auto_once_per_day = CreateConVar("ttt_draft_auto_once_per_day", "0", FCVAR_NONE, "Whether auto-draft should trigger once per day", 0, 1)
+local draft_auto_map_delay = CreateConVar("ttt_draft_auto_map_delay", "1", FCVAR_NONE, "Number of map switches before auto-draft triggers", 0)
+local draft_auto_round_delay = CreateConVar("ttt_draft_auto_round_delay", "1", FCVAR_NONE, "Number of round ends, after 'ttt_draft_auto_map_delay' map switches, before auto-draft triggers", 0)
+
 util.AddNetworkString("TTT_BeginRolePackDraft")
 util.AddNetworkString("TTT_BeginRolePackDraft_Part")
 util.AddNetworkString("TTT_NextRolePackDraft")
 util.AddNetworkString("TTT_SelectRolePackDraft")
 util.AddNetworkString("TTT_UpdateRolePackDraft")
 util.AddNetworkString("TTT_EndRolePackDraft")
+
+-- Stats tracking needed to know when to trigger auto-draft
+local function GetStats()
+    if not file.IsDir("rolepackdraft", "DATA") then
+        file.CreateDir("rolepackdraft")
+    end
+
+    return util.JSONToTable(file.Read("rolepackdraft/stats.json", "DATA") or "") or {
+        lastDraftDate = nil,
+        mapSwitchesSinceServerStart = 0,
+        roundsSinceServerStart = 0,
+    }
+end
+
+local function IncrementStat(key, value)
+    if not draft_auto:GetBool() then return end
+    local stats = GetStats()
+    -- If the stat doesn't exist, set it to 0 (shouldn't happen since we've set a default for all the stats tracked in GetStats() above)
+    stats[key] = stats[key] or 0
+    stats[key] = stats[key] + value
+    file.Write("rolepackdraft/stats.json", util.TableToJSON(stats))
+end
+
+local function SetStat(key, value)
+    if not draft_auto:GetBool() then return end
+    local stats = GetStats()
+    stats[key] = value
+    file.Write("rolepackdraft/stats.json", util.TableToJSON(stats))
+end
+
+hook.Add("TTTBeginRound", "TTTDraft_TTTBeginRound", function()
+    if not draft_auto:GetBool() then return end
+    local stats = GetStats()
+
+    -- Check draft hasn't already been done today
+    if draft_auto_once_per_day:GetBool() and stats.lastDraftDate and stats.lastDraftDate == os.date("%Y-%m-%d") then return end
+
+    -- Check enough map switches have happened
+    if draft_auto_map_delay:GetInt() > stats.mapSwitchesSinceServerStart then return end
+
+    -- Check enough rounds have ended
+    if draft_auto_round_delay:GetInt() > stats.roundsSinceServerStart then return end
+
+    -- Otherwise we're good to go!
+    BeginRolePackDraft()
+end)
+
+hook.Add("TTTEndRound", "TTTDraft_TTTEndRound", function()
+    IncrementStat("roundsSinceServerStart", 1)
+end)
+
+hook.Add("ShutDown", "TTTDraft_ShutDown", function()
+    IncrementStat("mapSwitchesSinceServerStart", 1)
+end)
+
 
 local function RandomisePickBanOrder(iteration)
     if not iteration then iteration = 0 end
@@ -483,7 +543,8 @@ local function NextRolePackDraft()
         end
 
         local rolePackJson = "{\"slots\":["
-        for _, slot in ipairs(dataTable.slots) do
+        -- First see if there's a slots configuration for the current number of players, else use the default configuration
+        for _, slot in ipairs(dataTable.slotsByPlayerCount and dataTable.slotsByPlayerCount[tostring(player.GetCount())] or dataTable.slots) do
             rolePackJson = rolePackJson .. "["
             for _, group in ipairs(slot.groups) do
                 local team = ROLE_TEAM_INNOCENT
@@ -586,6 +647,9 @@ function BeginRolePackDraft()
 
     draftPhase = 0
     timer.Create("TTT_Draft_NextTurn", draft_prep_time:GetInt(), 0, NextRolePackDraft)
+
+    -- Stats tracking for auto-draft
+    SetStat("lastDraftDate", os.date("%Y-%m-%d"))
 end
 concommand.Add("ttt_draft_begin", BeginRolePackDraft, nil, "Starts a role pack draft", FCVAR_SERVER_CAN_EXECUTE)
 concommand.Add("ttt_draft_cancel", function() EndRolePackDraft() end, nil, "Cancels a role pack draft", FCVAR_SERVER_CAN_EXECUTE)
