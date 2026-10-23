@@ -18,6 +18,8 @@ local draft_prep_time = GetConVar("ttt_draft_prep_time")
 local draft_turn_time = GetConVar("ttt_draft_turn_time")
 local draft_end_time = GetConVar("ttt_draft_end_time")
 
+local draft_pick_ends_turn = CreateConVar("ttt_draft_pick_ends_turn", 0, FCVAR_NONE, "Whether selecting a role immediately ends the turn", 0, 1)
+
 util.AddNetworkString("TTT_BeginRolePackDraft")
 util.AddNetworkString("TTT_BeginRolePackDraft_Part")
 util.AddNetworkString("TTT_NextRolePackDraft")
@@ -603,4 +605,8 @@ net.Receive("TTT_SelectRolePackDraft", function(_, ply)
     net.Start("TTT_UpdateRolePackDraft")
     net.WriteInt(role, util.RoleBits())
     net.Broadcast()
+
+    if draft_pick_ends_turn:GetBool() then
+        NextRolePackDraft()
+    end
 end)
