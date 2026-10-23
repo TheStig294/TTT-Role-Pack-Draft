@@ -23,6 +23,8 @@ local draft_auto_once_per_day = CreateConVar("ttt_draft_auto_once_per_day", "0",
 local draft_auto_map_delay = CreateConVar("ttt_draft_auto_map_delay", "1", FCVAR_NONE, "Number of map switches before auto-draft triggers", 0)
 local draft_auto_round_delay = CreateConVar("ttt_draft_auto_round_delay", "1", FCVAR_NONE, "Number of round ends, after 'ttt_draft_auto_map_delay' map switches, before auto-draft triggers", 0)
 
+local draft_persist = CreateConVar("ttt_draft_persist", "0", FCVAR_NONE, "Draft role pack persists between map switches", 0, 1)
+
 util.AddNetworkString("TTT_BeginRolePackDraft")
 util.AddNetworkString("TTT_BeginRolePackDraft_Part")
 util.AddNetworkString("TTT_NextRolePackDraft")
@@ -37,12 +39,21 @@ end
 
 local currentDate = os.date("%Y-%m-%d")
 local uptime = RealTime()
-local stats = util.JSONToTable(file.Read("rolepackdraft/stats.json", "DATA") or "") or {
-    lastDraftDate = nil,
-    lastUptime = uptime,
-    mapSwitchesSinceServerStartOrLastDraft = 0,
-    roundsSinceMapStart = 0,
-}
+
+local stats
+local statsFile = file.Read("rolepackdraft/stats.json", "DATA")
+if statsFile then
+    stats = util.JSONToTable(statsFile)
+end
+
+if not stats then
+    stats = {
+        lastDraftDate = nil,
+        lastUptime = uptime,
+        mapSwitchesSinceServerStartOrLastDraft = 0,
+        roundsSinceMapStart = 0,
+    }
+end
 
 local function IncrementStat(key, value)
     -- If the stat doesn't exist, set it to 0 (shouldn't happen since we've set a default for all the stats tracked in GetStats() above)
@@ -57,6 +68,16 @@ if stats.lastUptime > uptime then
     stats.mapSwitchesSinceServerStartOrLastDraft = 0
 end
 stats.lastUptime = uptime
+
+hook.Add("TTTPrepareRound", "TTTDraft_TTTPrepareRound", function()
+    timer.Simple(1, function ()
+        if draft_persist:GetBool() and lastDraftDate == currentDate then
+            RunConsoleCommand("ttt_role_pack", "draft")
+        end
+    
+        hook.Remove("TTTPrepareRound", "TTTDraft_TTTPrepareRound")
+    end)
+end)
 
 hook.Add("TTTBeginRound", "TTTDraft_TTTBeginRound", function()
     if not draft_auto:GetBool() then return end
@@ -540,9 +561,10 @@ local function NextRolePackDraft()
             return
         end
 
-        local rolePackJson = "{\"slots\":["
         -- First see if there's a slots configuration for the current number of players, else use the default configuration
-        for _, slot in ipairs(dataTable.slotsByPlayerCount and dataTable.slotsByPlayerCount[tostring(player.GetCount())] or dataTable.slots) do
+        local slotsTable = dataTable.slotsByPlayerCount and dataTable.slotsByPlayerCount[tostring(player.GetCount())] or dataTable.slots
+        local rolePackJson = "{\"slots\":["
+        for _, slot in ipairs(slotsTable) do
             rolePackJson = rolePackJson .. "["
             for _, group in ipairs(slot.groups) do
                 local team = ROLE_TEAM_INNOCENT
