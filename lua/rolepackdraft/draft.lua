@@ -20,10 +20,10 @@ local draft_end_time = GetConVar("ttt_draft_end_time")
 
 local draft_auto = CreateConVar("ttt_draft_auto", "0", FCVAR_NONE, "Whether the role draft should trigger automatically at the start of the first round of each map", 0, 1)
 local draft_auto_once_per_day = CreateConVar("ttt_draft_auto_once_per_day", "0", FCVAR_NONE, "Whether auto-draft should trigger once per day", 0, 1)
-local draft_auto_map_delay = CreateConVar("ttt_draft_auto_map_delay", "1", FCVAR_NONE, "Number of map switches before auto-draft triggers", 0)
-local draft_auto_round_delay = CreateConVar("ttt_draft_auto_round_delay", "1", FCVAR_NONE, "Number of round ends, after 'ttt_draft_auto_map_delay' map switches, before auto-draft triggers", 0)
+local draft_auto_map_frequency = CreateConVar("ttt_draft_auto_map_frequency", "1", FCVAR_NONE, "How often to trigger auto-draft per map loads. E.g. every map = 1, every 2 maps = 2, every 3 maps = 3, etc.", 1)
+local draft_auto_round_number = CreateConVar("ttt_draft_auto_round_number", "1", FCVAR_NONE, "After 'ttt_draft_auto_map_frequency' map loads, the round number that auto-draft triggers. E.g. 1st round = 1, 2nd round = 2, 3rd round = 3", 1)
 
-local draft_persist = CreateConVar("ttt_draft_persist", "0", FCVAR_NONE, "Draft role pack persists between map switches", 0, 1)
+local draft_persist_per_day = CreateConVar("ttt_draft_persist_per_day", "0", FCVAR_NONE, "Draft role pack persists between map loads, for a whole day", 0, 1)
 
 util.AddNetworkString("TTT_BeginRolePackDraft")
 util.AddNetworkString("TTT_BeginRolePackDraft_Part")
@@ -33,45 +33,37 @@ util.AddNetworkString("TTT_UpdateRolePackDraft")
 util.AddNetworkString("TTT_EndRolePackDraft")
 
 -- Stats tracking needed to know when to trigger auto-draft
-if not file.IsDir("rolepackdraft", "DATA") then
-    file.CreateDir("rolepackdraft")
-end
-
 local currentDate = os.date("%Y-%m-%d")
 local uptime = RealTime()
-
-local stats
 local statsFile = file.Read("rolepackdraft/stats.json", "DATA")
+local stats
+
 if statsFile then
     stats = util.JSONToTable(statsFile)
 end
-
 if not stats then
     stats = {
         lastDraftDate = nil,
         lastUptime = uptime,
-        mapSwitchesSinceServerStartOrLastDraft = 0,
+        mapLoadsSinceServerStartOrLastDraft = 0,
         roundsSinceMapStart = 0,
     }
 end
 
-local function IncrementStat(key, value)
-    -- If the stat doesn't exist, set it to 0 (shouldn't happen since we've set a default for all the stats tracked in GetStats() above)
-    stats[key] = stats[key] or 0
-    stats[key] = stats[key] + value
-end
-
 -- Setting stats needed on map start
 stats.roundsSinceMapStart = 0
--- Detecting if this is a new server start, if so, reset the map switches counter
+stats.mapLoadsSinceServerStartOrLastDraft = stats.mapLoadsSinceServerStartOrLastDraft or 0
+stats.mapLoadsSinceServerStartOrLastDraft = stats.mapLoadsSinceServerStartOrLastDraft + 1
+-- Detecting if this is a new server start, if so, reset the map loads counter
 if stats.lastUptime > uptime then
-    stats.mapSwitchesSinceServerStartOrLastDraft = 0
+    stats.mapLoadsSinceServerStartOrLastDraft = 0
 end
 stats.lastUptime = uptime
 
 hook.Add("TTTPrepareRound", "TTTDraft_TTTPrepareRound", function()
     timer.Simple(1, function ()
-        if draft_persist:GetBool() and stats.lastDraftDate and stats.lastDraftDate == currentDate then
+        -- If this is a new day, don't reset to a role draft from a previous day
+        if draft_persist_per_day:GetBool() and stats.lastDraftDate and stats.lastDraftDate == currentDate then
             RunConsoleCommand("ttt_role_pack", "draft")
         end
     
@@ -84,22 +76,28 @@ hook.Add("TTTBeginRound", "TTTDraft_TTTBeginRound", function()
 
     if draft_auto_once_per_day:GetBool() and stats.lastDraftDate and stats.lastDraftDate == currentDate then return end
 
-    -- Check enough map switches have happened
-    if draft_auto_map_delay:GetInt() > stats.mapSwitchesSinceServerStartOrLastDraft then return end
+    -- Check enough map loads have happened
+    if draft_auto_map_frequency:GetInt() > stats.mapLoadsSinceServerStartOrLastDraft then return end
 
     -- Check enough rounds have ended
-    if draft_auto_round_delay:GetInt() > stats.roundsSinceMapStart then return end
+    if draft_auto_round_number:GetInt() > stats.roundsSinceMapStart then return end
 
     -- Otherwise we're good to go!
     BeginRolePackDraft()
+
+    -- We only want to trigger the role draft once per map, no matter how the convars are configured
+    hook.Remove("TTTBeginRound", "TTTDraft_TTTBeginRound")
 end)
 
 hook.Add("TTTEndRound", "TTTDraft_TTTEndRound", function()
-    IncrementStat("roundsSinceMapStart", 1)
+    stats.roundsSinceMapStart = stats.roundsSinceMapStart or 0
+    stats.roundsSinceMapStart = stats.roundsSinceMapStart + 1
 end)
 
 hook.Add("ShutDown", "TTTDraft_ShutDown", function()
-    IncrementStat("mapSwitchesSinceServerStartOrLastDraft", 1)
+    if not file.IsDir("rolepackdraft", "DATA") then
+        file.CreateDir("rolepackdraft")
+    end
     file.Write("rolepackdraft/stats.json", util.TableToJSON(stats))
 end)
 
@@ -670,7 +668,7 @@ function BeginRolePackDraft()
 
     -- Stats tracking for auto-draft
     stats.lastDraftDate = currentDate
-    stats.mapSwitchesSinceServerStartOrLastDraft = 0
+    stats.mapLoadsSinceServerStartOrLastDraft = 0
 end
 concommand.Add("ttt_draft_begin", BeginRolePackDraft, nil, "Starts a role pack draft", FCVAR_SERVER_CAN_EXECUTE)
 concommand.Add("ttt_draft_cancel", function() EndRolePackDraft() end, nil, "Cancels a role pack draft", FCVAR_SERVER_CAN_EXECUTE)
