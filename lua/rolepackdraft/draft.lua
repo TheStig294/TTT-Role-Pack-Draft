@@ -71,7 +71,7 @@ stats.lastUptime = uptime
 
 hook.Add("TTTPrepareRound", "TTTDraft_TTTPrepareRound", function()
     timer.Simple(1, function ()
-        if draft_persist:GetBool() and lastDraftDate == currentDate then
+        if draft_persist:GetBool() and stats.lastDraftDate and stats.lastDraftDate == currentDate then
             RunConsoleCommand("ttt_role_pack", "draft")
         end
     
