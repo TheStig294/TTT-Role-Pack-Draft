@@ -486,7 +486,7 @@ local function NextRolePackDraft()
 
         local rolePackJson = "{\"slots\":["
         -- First see if there's a slots configuration for the current number of players, else use the default configuration
-        for _, slot in ipairs(dataTable.slotsByPlayerCount and dataTable.slotsByPlayerCount[tostring(player.GetCount())] or dataTable.slots) do
+        for _, slot in ipairs(dataTable.slotsbyplayercount and dataTable.slotsbyplayercount[player.GetCount()] or dataTable.slots) do
             rolePackJson = rolePackJson .. "["
             for _, group in ipairs(slot.groups) do
                 local team = ROLE_TEAM_INNOCENT
