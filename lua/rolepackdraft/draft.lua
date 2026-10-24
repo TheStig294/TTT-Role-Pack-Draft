@@ -407,9 +407,6 @@ local banned = {
 }
 
 -- Reading picked roles for slotsbyplayercount to update slots on the player count changing
-if not file.IsDir("rolepackdraft", "DATA") then
-    file.CreateDir("rolepackdraft")
-end
 local pickedJson = file.Read("rolepackdraft/picked.json", "DATA")
 
 if pickedJson then
