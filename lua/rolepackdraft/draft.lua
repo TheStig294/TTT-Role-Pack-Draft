@@ -406,34 +406,90 @@ local banned = {
     [ROLE_TEAM_DETECTIVE] = {}
 }
 
+-- Reading picked roles for slotsbyplayercount to update slots on the player count changing
+if not file.IsDir("rolepackdraft", "DATA") then
+    file.CreateDir("rolepackdraft")
+end
+local pickedJson = file.Read("rolepackdraft/picked.json", "DATA")
+
+if pickedJson then
+    picked = util.JSONToTable(pickedJson)
+end
+
 function EndRolePackDraft()
     RunConsoleCommand("ttt_roundrestart")
 
     timer.Remove("TTT_Draft_NextTurn")
 
-    draftPhase = -1
-    selected = nil
-    order = {}
-    roles = {}
-    picked = {
-        [ROLE_TEAM_INNOCENT] = {},
-        [ROLE_TEAM_TRAITOR] = {},
-        [ROLE_TEAM_JESTER] = {},
-        [ROLE_TEAM_INDEPENDENT] = {},
-        [ROLE_TEAM_MONSTER] = {},
-        [ROLE_TEAM_DETECTIVE] = {}
-    }
-    banned = {
-        [ROLE_TEAM_INNOCENT] = {},
-        [ROLE_TEAM_TRAITOR] = {},
-        [ROLE_TEAM_JESTER] = {},
-        [ROLE_TEAM_INDEPENDENT] = {},
-        [ROLE_TEAM_MONSTER] = {},
-        [ROLE_TEAM_DETECTIVE] = {}
-    }
-
     net.Start("TTT_EndRolePackDraft")
     net.Broadcast()
+end
+
+local function UpdateDraftRolePack()
+    local dataJson = file.Read("rolepackdraft.json", "DATA")
+
+    if #dataJson == 0 then
+        ErrorNoHalt("Role pack draft roles list read failed!\n")
+        return
+    end
+
+    local dataTable = util.JSONToTable(dataJson)
+
+    if dataTable == nil then
+        ErrorNoHalt("Role pack draft roles list table conversion failed!\n")
+        return
+    end
+
+    local rolePackJson = "{\"slots\":["
+    -- First see if there's a slots configuration for the current number of players, else use the default configuration
+    for _, slot in ipairs(dataTable.slotsbyplayercount and dataTable.slotsbyplayercount[player.GetCount()] or dataTable.slots) do
+        rolePackJson = rolePackJson .. "["
+        for _, group in ipairs(slot.groups) do
+            local team = ROLE_TEAM_INNOCENT
+            if group == "traitors" then team = ROLE_TEAM_TRAITOR end
+            if group == "jesters" then team = ROLE_TEAM_JESTER end
+            if group == "independents" then team = ROLE_TEAM_INDEPENDENT end
+            if group == "monsters" then team = ROLE_TEAM_MONSTER end
+            if group == "detectives" then team = ROLE_TEAM_DETECTIVE end
+            for _, role in ipairs(picked[team]) do
+                rolePackJson = rolePackJson .. "{\"weight\":1,\"role\":\"" .. ROLE_STRINGS_RAW[role] .. "\"},"
+            end
+        end
+        for _, constant in ipairs(slot.constants) do
+            rolePackJson = rolePackJson .. "{\"weight\":1,\"role\":\"" .. constant .. "\"},"
+        end
+        rolePackJson = string.sub(rolePackJson, 1, -2) .. "],"
+    end
+    rolePackJson = string.sub(rolePackJson, 1, -2) .. "],\"name\":\"draft\",\"config\":{\"allowduplicates\":"
+    if dataTable.config.allowduplicates then
+        rolePackJson = rolePackJson .. "true"
+    else
+        rolePackJson = rolePackJson .. "false"
+    end
+    rolePackJson = rolePackJson .. "}}"
+
+    local convarsJson = "{\"name\":\"draft\",\"convars\":["
+    for role = ROLE_INNOCENT, ROLE_MAX do
+        if not DEFAULT_ROLES[role] and not ROLE_BLOCK_SPAWN_CONVARS[role] then
+            convarsJson = convarsJson .. "{\"invalid\":false,\"cvar\":\"ttt_" .. ROLE_STRINGS_RAW[role] .. "_enabled\",\"value\":\"0\"},"
+        end
+    end
+    convarsJson = string.sub(convarsJson, 1, -2) .. "]}"
+
+    if not file.IsDir("rolepacks", "DATA") then
+        if file.Exists("rolepacks", "DATA") then
+            ErrorNoHalt("Item named 'rolepacks' already exists in garrysmod/data but it is not a directory\n")
+            return
+        end
+
+        file.CreateDir("rolepacks")
+    end
+    file.CreateDir("rolepacks/draft")
+    file.Write("rolepacks/draft/roles.json", rolePackJson)
+    file.CreateDir("rolepacks/draft/weapons")
+    file.Write("rolepacks/draft/convars.json", convarsJson)
+
+    GetConVar("ttt_role_pack"):SetString("draft")
 end
 
 local function NextRolePackDraft()
@@ -472,72 +528,45 @@ local function NextRolePackDraft()
     elseif draftPhase == #order + 1 then
         timer.Create("TTT_Draft_NextTurn", draft_end_time:GetInt(), 1, function() EndRolePackDraft() end)
 
-        local dataJson = file.Read("rolepackdraft.json", "DATA")
-        if #dataJson == 0 then
-            ErrorNoHalt("Role pack draft roles list read failed!\n")
-            return
-        end
+        UpdateDraftRolePack()
 
-        local dataTable = util.JSONToTable(dataJson)
-        if dataTable == nil then
-            ErrorNoHalt("Role pack draft roles list table conversion failed!\n")
-            return
+        -- Saving picked roles for slotsbyplayercount to update slots on the player count changing
+        if not file.IsDir("rolepackdraft", "DATA") then
+            file.CreateDir("rolepackdraft")
         end
-
-        local rolePackJson = "{\"slots\":["
-        -- First see if there's a slots configuration for the current number of players, else use the default configuration
-        for _, slot in ipairs(dataTable.slotsbyplayercount and dataTable.slotsbyplayercount[player.GetCount()] or dataTable.slots) do
-            rolePackJson = rolePackJson .. "["
-            for _, group in ipairs(slot.groups) do
-                local team = ROLE_TEAM_INNOCENT
-                if group == "traitors" then team = ROLE_TEAM_TRAITOR end
-                if group == "jesters" then team = ROLE_TEAM_JESTER end
-                if group == "independents" then team = ROLE_TEAM_INDEPENDENT end
-                if group == "monsters" then team = ROLE_TEAM_MONSTER end
-                if group == "detectives" then team = ROLE_TEAM_DETECTIVE end
-                for _, role in ipairs(picked[team]) do
-                    rolePackJson = rolePackJson .. "{\"weight\":1,\"role\":\"" .. ROLE_STRINGS_RAW[role] .. "\"},"
-                end
-            end
-            for _, constant in ipairs(slot.constants) do
-                rolePackJson = rolePackJson .. "{\"weight\":1,\"role\":\"" .. constant .. "\"},"
-            end
-            rolePackJson = string.sub(rolePackJson, 1, -2) .. "],"
-        end
-        rolePackJson = string.sub(rolePackJson, 1, -2) .. "],\"name\":\"draft\",\"config\":{\"allowduplicates\":"
-        if dataTable.config.allowduplicates then
-            rolePackJson = rolePackJson .. "true"
-        else
-            rolePackJson = rolePackJson .. "false"
-        end
-        rolePackJson = rolePackJson .. "}}"
-
-        local convarsJson = "{\"name\":\"draft\",\"convars\":["
-        for role = ROLE_INNOCENT, ROLE_MAX do
-            if not DEFAULT_ROLES[role] and not ROLE_BLOCK_SPAWN_CONVARS[role] then
-                convarsJson = convarsJson .. "{\"invalid\":false,\"cvar\":\"ttt_" .. ROLE_STRINGS_RAW[role] .. "_enabled\",\"value\":\"0\"},"
-            end
-        end
-        convarsJson = string.sub(convarsJson, 1, -2) .. "]}"
-
-        if not file.IsDir("rolepacks", "DATA") then
-            if file.Exists("rolepacks", "DATA") then
-                ErrorNoHalt("Item named 'rolepacks' already exists in garrysmod/data but it is not a directory\n")
-                return
-            end
-
-            file.CreateDir("rolepacks")
-        end
-        file.CreateDir("rolepacks/draft")
-        file.Write("rolepacks/draft/roles.json", rolePackJson)
-        file.CreateDir("rolepacks/draft/weapons")
-        file.Write("rolepacks/draft/convars.json", convarsJson)
-
-        GetConVar("ttt_role_pack"):SetString("draft")
+        file.Write("rolepackdraft/picked.json", util.TableToJSON(picked))
     end
 end
 
+-- Update the draft role pack so the slotsbyplayercount stays up-to-date with a different player count at the start of the round
+hook.Add("TTTSelectRoles", "TTTDraft_TTTSelectRoles", UpdateDraftRolePack)
+
 function BeginRolePackDraft()
+    -- Stats tracking for auto-draft, we want stats to be accurate even if a draft is manually triggered
+    SetAutoRoleDraftStat(lastDraftDate, os.date("%Y-%m-%d"))
+    SetAutoRoleDraftStat(mapLoadsSinceServerStartOrLastDraft, 0)
+
+    draftPhase = -1
+    selected = nil
+    order = {}
+    roles = {}
+    picked = {
+        [ROLE_TEAM_INNOCENT] = {},
+        [ROLE_TEAM_TRAITOR] = {},
+        [ROLE_TEAM_JESTER] = {},
+        [ROLE_TEAM_INDEPENDENT] = {},
+        [ROLE_TEAM_MONSTER] = {},
+        [ROLE_TEAM_DETECTIVE] = {}
+    }
+    banned = {
+        [ROLE_TEAM_INNOCENT] = {},
+        [ROLE_TEAM_TRAITOR] = {},
+        [ROLE_TEAM_JESTER] = {},
+        [ROLE_TEAM_INDEPENDENT] = {},
+        [ROLE_TEAM_MONSTER] = {},
+        [ROLE_TEAM_DETECTIVE] = {}
+    }
+
     order = RandomisePickBanOrder()
     roles = ReadAvailableRoles()
 

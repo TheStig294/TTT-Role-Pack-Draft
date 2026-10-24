@@ -39,18 +39,18 @@ else
 end
 stats.bootTime = bootTime
 
-hook.Add("TTTPrepareRound", "TTTDraft_TTTPrepareRound", function()
+hook.Add("TTTPrepareRound", "TTTAutoDraft_TTTPrepareRound", function()
     timer.Simple(1, function()
         -- If this is a new day, don't reset to a role draft from a previous day
         if draft_persist_per_day:GetBool() and stats.lastDraftDate and stats.lastDraftDate == currentDate then
             RunConsoleCommand("ttt_role_pack", "draft")
         end
 
-        hook.Remove("TTTPrepareRound", "TTTDraft_TTTPrepareRound")
+        hook.Remove("TTTPrepareRound", "TTTAutoDraft_TTTPrepareRound")
     end)
 end)
 
-hook.Add("TTTBeginRound", "TTTDraft_TTTBeginRound", function()
+hook.Add("TTTBeginRound", "TTTAutoDraft_TTTBeginRound", function()
     if not draft_auto:GetBool() then return end
     stats.roundsSinceMapStart = stats.roundsSinceMapStart + 1
 
@@ -65,16 +65,18 @@ hook.Add("TTTBeginRound", "TTTDraft_TTTBeginRound", function()
 
     -- Otherwise we're good to go!
     BeginRolePackDraft()
-    stats.lastDraftDate = currentDate
-    stats.mapLoadsSinceServerStartOrLastDraft = 0
 
     -- We only want to trigger the role draft once per map, no matter how the convars are configured
-    hook.Remove("TTTBeginRound", "TTTDraft_TTTBeginRound")
+    hook.Remove("TTTBeginRound", "TTTAutoDraft_TTTBeginRound")
 end)
 
-hook.Add("ShutDown", "TTTDraft_ShutDown", function()
+hook.Add("ShutDown", "TTTAutoDraft_ShutDown", function()
     if not file.IsDir("rolepackdraft", "DATA") then
         file.CreateDir("rolepackdraft")
     end
     file.Write("rolepackdraft/stats.json", util.TableToJSON(stats))
 end)
+
+function SetAutoRoleDraftStat(key, value)
+    stats[key] = value
+end
