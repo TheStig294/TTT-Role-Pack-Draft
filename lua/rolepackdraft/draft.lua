@@ -375,7 +375,7 @@ local function ReadAvailableRoles()
         for _, roleStr in ipairs(teamRoles) do
             for role = ROLE_INNOCENT, ROLE_MAX do
                 if ROLE_STRINGS_RAW[role] == roleStr then
-                    if not ROLE_SELECTION_PREDICATE[role] or ROLE_SELECTION_PREDICATE[role]() then
+                    if not ROLE_SELECTION_PREDICATE[role] or ROLE_SELECTION_PREDICATE[role]() or role == ROLE_MARSHAL then
                         table.insert(roles[team], role)
                     end
                 end
