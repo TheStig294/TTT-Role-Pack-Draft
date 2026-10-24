@@ -2,7 +2,6 @@ local draft_auto = CreateConVar("ttt_draft_auto", "0", FCVAR_NONE, "Whether the 
 local draft_auto_once_per_day = CreateConVar("ttt_draft_auto_once_per_day", "0", FCVAR_NONE, "Whether auto-draft should trigger once per day", 0, 1)
 local draft_auto_map_frequency = CreateConVar("ttt_draft_auto_map_frequency", "1", FCVAR_NONE, "How often to trigger auto-draft per map loads. E.g. every map = 1, every 2 maps = 2, every 3 maps = 3, etc.", 1)
 local draft_auto_round_number = CreateConVar("ttt_draft_auto_round_number", "1", FCVAR_NONE, "After 'ttt_draft_auto_map_frequency' map loads, the round number that auto-draft triggers. E.g. 1st round = 1, 2nd round = 2, 3rd round = 3", 1)
-local draft_persist_per_day = CreateConVar("ttt_draft_persist_per_day", "0", FCVAR_NONE, "Draft role pack persists between map loads, for a whole day", 0, 1)
 
 
 -- Stats tracking needed to know when to trigger auto-draft
@@ -39,17 +38,6 @@ else
 end
 stats.bootTime = bootTime
 
-hook.Add("TTTPrepareRound", "TTTAutoDraft_TTTPrepareRound", function()
-    timer.Simple(1, function()
-        -- If this is a new day, don't reset to a role draft from a previous day, nor if the role draft role pack was switched off
-        if draft_persist_per_day:GetBool() and stats.lastDraftDate and stats.lastDraftDate == currentDate and stats.isDraftRolePackActive then
-            RunConsoleCommand("ttt_role_pack", "draft")
-        end
-
-        hook.Remove("TTTPrepareRound", "TTTAutoDraft_TTTPrepareRound")
-    end)
-end)
-
 hook.Add("TTTBeginRound", "TTTAutoDraft_TTTBeginRound", function()
     if not draft_auto:GetBool() then return end
     stats.roundsSinceMapStart = stats.roundsSinceMapStart + 1
@@ -79,4 +67,8 @@ end)
 
 function SetAutoRoleDraftStat(key, value)
     stats[key] = value
+end
+
+function GetAutoRoleDraftStat(key)
+    return stats[key]
 end

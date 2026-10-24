@@ -19,6 +19,7 @@ local draft_turn_time = GetConVar("ttt_draft_turn_time")
 local draft_end_time = GetConVar("ttt_draft_end_time")
 
 local draft_pick_ends_turn = CreateConVar("ttt_draft_pick_ends_turn", 0, FCVAR_NONE, "Whether selecting a role immediately ends the turn", 0, 1)
+local draft_persist_per_day = CreateConVar("ttt_draft_persist_per_day", "0", FCVAR_NONE, "Draft role pack persists between map loads, for a whole day", 0, 1)
 
 util.AddNetworkString("TTT_BeginRolePackDraft")
 util.AddNetworkString("TTT_BeginRolePackDraft_Part")
@@ -422,7 +423,7 @@ function EndRolePackDraft()
     net.Broadcast()
 end
 
-local function UpdateDraftRolePack()
+local function UpdateAndSetDraftRolePack()
     -- Don't write a pack if nothing has been drafted yet (e.g. no picked.json on a fresh install)
     local anyPicked = false
     for _, teamPicks in pairs(picked) do
@@ -548,6 +549,8 @@ local function UpdateDraftRolePack()
     file.Write("rolepacks/draft/roles.json", rolePackJson)
     file.CreateDir("rolepacks/draft/weapons")
     file.Write("rolepacks/draft/convars.json", convarsJson)
+
+    GetConVar("ttt_role_pack"):SetString("draft")
 end
 
 local function NextRolePackDraft()
@@ -586,8 +589,7 @@ local function NextRolePackDraft()
     elseif draftPhase == #order + 1 then
         timer.Create("TTT_Draft_NextTurn", draft_end_time:GetInt(), 1, function() EndRolePackDraft() end)
 
-        UpdateDraftRolePack()
-        GetConVar("ttt_role_pack"):SetString("draft")
+        UpdateAndSetDraftRolePack()
 
         -- Saving picked roles for slotsbyplayercount to update slots on the player count changing
         if not file.IsDir("rolepackdraft", "DATA") then
@@ -597,23 +599,11 @@ local function NextRolePackDraft()
     end
 end
 
--- Update the draft role pack so the slotsbyplayercount stays up-to-date with a different player count at the start of the round
-hook.Add("TTTPrepareRound", "TTTDraft_TTTPrepareRound", function()
-    UpdateDraftRolePack()
-    -- Only update the role pack between rounds if it is currently active
-    local rolePackCvar = GetConVar("ttt_role_pack")
-    local isDraftRolePackActive = rolePackCvar:GetString() == "draft"
-    if isDraftRolePackActive then
-        rolePackCvar:SetString("draft")
-    end
-    -- Keep track if draft role pack was switched off,
-    -- so that ttt_draft_persist_per_day 1 doesn't switch the draft role pack back on if it was switched off
-    SetAutoRoleDraftStat("isDraftRolePackActive", isDraftRolePackActive)
-end)
+local currentDate = os.date("%Y-%m-%d")
 
 function BeginRolePackDraft()
     -- Stats tracking for auto-draft, we want stats to be accurate even if a draft is manually triggered
-    SetAutoRoleDraftStat("lastDraftDate", os.date("%Y-%m-%d"))
+    SetAutoRoleDraftStat("lastDraftDate", currentDate)
     SetAutoRoleDraftStat("mapLoadsSinceServerStartOrLastDraft", 0)
 
     draftPhase = -1
@@ -708,4 +698,37 @@ net.Receive("TTT_SelectRolePackDraft", function(_, ply)
     if draft_pick_ends_turn:GetBool() then
         NextRolePackDraft()
     end
+end)
+
+local addedRolePackCallback = false
+
+hook.Add("TTTPrepareRound", "TTTDraft_TTTPrepareRound", function()
+    timer.Simple(1, function()
+        local rolePackCvar = GetConVar("ttt_role_pack")
+
+        -- Restore the draft pack after a map change, only if it was active, it's the same day, and it isn't already set
+        local lastDraftDate = GetAutoRoleDraftStat("lastDraftDate")
+
+        if draft_persist_per_day:GetBool() and lastDraftDate and lastDraftDate == currentDate
+        and GetAutoRoleDraftStat("isDraftRolePackActive") and rolePackCvar:GetString() ~= "draft" then
+            rolePackCvar:SetString("draft")
+        end
+
+        -- If the active role pack is manually switched away from the draft role pack by an admin or otherwise, don't restore it
+        if not addedRolePackCallback then
+            addedRolePackCallback = true
+            cvars.AddChangeCallback("ttt_role_pack", function(_, _, newValue)
+                SetAutoRoleDraftStat("isDraftRolePackActive", newValue == "draft")
+            end, "TTTDraft_RolePackChanged")
+        end
+
+        local isDraft = rolePackCvar:GetString() == "draft"
+        SetAutoRoleDraftStat("isDraftRolePackActive", isDraft)
+
+        -- Otherwise, update and set the draft role pack for a potentially new player count this round
+        -- Yes, this doesn't work with players joining/leaving during round prep, but TTTSelectRoles was too late, so we use TTTPrepareRound instead
+        if isDraft then
+            UpdateAndSetDraftRolePack()
+        end
+    end)
 end)
