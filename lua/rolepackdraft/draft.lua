@@ -548,8 +548,6 @@ local function UpdateDraftRolePack()
     file.Write("rolepacks/draft/roles.json", rolePackJson)
     file.CreateDir("rolepacks/draft/weapons")
     file.Write("rolepacks/draft/convars.json", convarsJson)
-
-    GetConVar("ttt_role_pack"):SetString("draft")
 end
 
 local function NextRolePackDraft()
@@ -589,6 +587,7 @@ local function NextRolePackDraft()
         timer.Create("TTT_Draft_NextTurn", draft_end_time:GetInt(), 1, function() EndRolePackDraft() end)
 
         UpdateDraftRolePack()
+        GetConVar("ttt_role_pack"):SetString("draft")
 
         -- Saving picked roles for slotsbyplayercount to update slots on the player count changing
         if not file.IsDir("rolepackdraft", "DATA") then
@@ -599,7 +598,18 @@ local function NextRolePackDraft()
 end
 
 -- Update the draft role pack so the slotsbyplayercount stays up-to-date with a different player count at the start of the round
-hook.Add("TTTPrepareRound", "TTTDraft_TTTPrepareRound", UpdateDraftRolePack)
+hook.Add("TTTPrepareRound", "TTTDraft_TTTPrepareRound", function()
+    UpdateDraftRolePack()
+    -- Only update the role pack between rounds if it is currently active
+    local rolePackCvar = GetConVar("ttt_role_pack")
+    local isDraftRolePackActive = rolePackCvar:GetString() == "draft"
+    if isDraftRolePackActive then
+        rolePackCvar:SetString("draft")
+    end
+    -- Keep track if draft role pack was switched off,
+    -- so that ttt_draft_persist_per_day 1 doesn't switch the draft role pack back on if it was switched off
+    SetAutoRoleDraftStat("isDraftRolePackActive", isDraftRolePackActive)
+end)
 
 function BeginRolePackDraft()
     -- Stats tracking for auto-draft, we want stats to be accurate even if a draft is manually triggered

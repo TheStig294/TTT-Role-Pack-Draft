@@ -41,8 +41,8 @@ stats.bootTime = bootTime
 
 hook.Add("TTTPrepareRound", "TTTAutoDraft_TTTPrepareRound", function()
     timer.Simple(1, function()
-        -- If this is a new day, don't reset to a role draft from a previous day
-        if draft_persist_per_day:GetBool() and stats.lastDraftDate and stats.lastDraftDate == currentDate then
+        -- If this is a new day, don't reset to a role draft from a previous day, nor if the role draft role pack was switched off
+        if draft_persist_per_day:GetBool() and stats.lastDraftDate and stats.lastDraftDate == currentDate and stats.isDraftRolePackActive then
             RunConsoleCommand("ttt_role_pack", "draft")
         end
 
