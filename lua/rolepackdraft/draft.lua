@@ -438,7 +438,7 @@ local function UpdateDraftRolePack()
 
     local dataJson = file.Read("rolepackdraft.json", "DATA")
 
-    if not dataJson or table.IsEmpty(dataJson) then
+    if not dataJson or #dataJson == 0 then
         ErrorNoHalt("Role pack draft roles list read failed!\n")
         return
     end
@@ -521,7 +521,7 @@ local function UpdateDraftRolePack()
         config = {allowduplicates = (dataTable.config and dataTable.config.allowduplicates) and true or false}
     })
 
-    if not rolePackJson or table.IsEmpty(rolePackJson) then
+    if not rolePackJson or #rolePackJson == 0 then
         ErrorNoHalt("Role pack draft roles.json conversion failed!\n")
         return
     end
@@ -534,7 +534,7 @@ local function UpdateDraftRolePack()
     end
 
     local convarsJson = util.TableToJSON({name = "draft", convars = convars})
-    if not convarsJson or table.IsEmpty(convarsJson) then
+    if not convarsJson or #convarsJson == 0  then
         ErrorNoHalt("Role pack draft convars.json conversion failed!\n")
         return
     end
@@ -602,12 +602,12 @@ local function NextRolePackDraft()
 end
 
 -- Update the draft role pack so the slotsbyplayercount stays up-to-date with a different player count at the start of the round
-hook.Add("TTTSelectRoles", "TTTDraft_TTTSelectRoles", UpdateDraftRolePack)
+hook.Add("TTTPrepareRound", "TTTDraft_TTTPrepareRound", UpdateDraftRolePack)
 
 function BeginRolePackDraft()
     -- Stats tracking for auto-draft, we want stats to be accurate even if a draft is manually triggered
-    SetAutoRoleDraftStat(lastDraftDate, os.date("%Y-%m-%d"))
-    SetAutoRoleDraftStat(mapLoadsSinceServerStartOrLastDraft, 0)
+    SetAutoRoleDraftStat("lastDraftDate", os.date("%Y-%m-%d"))
+    SetAutoRoleDraftStat("mapLoadsSinceServerStartOrLastDraft", 0)
 
     draftPhase = -1
     selected = nil
