@@ -375,7 +375,9 @@ local function ReadAvailableRoles()
         for _, roleStr in ipairs(teamRoles) do
             for role = ROLE_INNOCENT, ROLE_MAX do
                 if ROLE_STRINGS_RAW[role] == roleStr then
-                    table.insert(roles[team], role)
+                    if not ROLE_SELECTION_PREDICATE[role] or ROLE_SELECTION_PREDICATE[role]() then
+                        table.insert(roles[team], role)
+                    end
                 end
             end
         end
@@ -625,6 +627,8 @@ function BeginRolePackDraft()
         [ROLE_TEAM_DETECTIVE] = {}
     }
 
+    RunConsoleCommand("ttt_roundrestart")
+
     order = RandomisePickBanOrder()
     roles = ReadAvailableRoles()
 
@@ -665,7 +669,6 @@ function BeginRolePackDraft()
     end
 
     local time = draft_prep_time:GetInt() + (draft_turn_time:GetInt() * #order) + draft_end_time:GetInt() + 1
-    RunConsoleCommand("ttt_roundrestart")
     timer.Simple(0, function()
         SetRoundEnd(CurTime() + time)
         timer.Remove("prep2begin")
