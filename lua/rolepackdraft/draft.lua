@@ -18,8 +18,8 @@ local draft_prep_time = GetConVar("ttt_draft_prep_time")
 local draft_turn_time = GetConVar("ttt_draft_turn_time")
 local draft_end_time = GetConVar("ttt_draft_end_time")
 
-local draft_pick_ends_turn = CreateConVar("ttt_draft_pick_ends_turn", 0, FCVAR_NONE, "Whether selecting a role immediately ends the turn", 0, 1)
-local draft_persist_per_day = CreateConVar("ttt_draft_persist_per_day", "0", FCVAR_NONE, "Draft role pack persists between map loads, for a whole day", 0, 1)
+local draft_pick_ends_turn = CreateConVar("ttt_draft_pick_ends_turn", "0", FCVAR_NONE, "Whether selecting a role immediately ends the turn", 0, 1)
+local draft_persist_maps = CreateConVar("ttt_draft_persist_maps", "0", FCVAR_NONE, "Number of map switches to persist the drafted role pack", 0)
 
 util.AddNetworkString("TTT_BeginRolePackDraft")
 util.AddNetworkString("TTT_BeginRolePackDraft_Part")
@@ -707,11 +707,16 @@ hook.Add("TTTPrepareRound", "TTTDraft_TTTPrepareRound", function()
     timer.Simple(1, function()
         local rolePackCvar = GetConVar("ttt_role_pack")
 
-        -- Restore the draft pack after a map change, only if it was active, it's the same day, and it isn't already set
+        -- Restore the draft pack after a map change if:
+        -- we're still within the number of map switches allowed,
+        -- it's the same day,
+        -- the draft role pack was active,
+        -- and it isn't already set
         local lastDraftDate = GetAutoRoleDraftStat("lastDraftDate")
+        local mapLoads = GetAutoRoleDraftStat("mapLoadsSinceServerStartOrLastDraft")
+        local draftPackActive = GetAutoRoleDraftStat("isDraftRolePackActive")
 
-        if draft_persist_per_day:GetBool() and lastDraftDate and lastDraftDate == currentDate
-        and GetAutoRoleDraftStat("isDraftRolePackActive") and rolePackCvar:GetString() ~= "draft" then
+        if mapLoads <= draft_persist_maps:GetInt() and lastDraftDate and lastDraftDate == currentDate and draftPackActive and rolePackCvar:GetString() ~= "draft" then
             rolePackCvar:SetString("draft")
         end
 
